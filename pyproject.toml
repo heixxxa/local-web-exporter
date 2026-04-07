@@ -1,7 +1,7 @@
 [project]
 name = "twitter-local"
 version = "0.1.0"
-description = "Add your description here"
+description = "IndexedDB-to-Markdown exporter with platform adapters for social sites."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
