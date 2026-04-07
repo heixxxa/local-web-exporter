@@ -52,12 +52,18 @@ async ({ dbPrefix, dbNames, storeNames }) => {
     try {
       const db = await openDatabase(name);
       const tables = {};
-      for (const storeName of storeNames || []) {
+            const availableStores = Array.from(db.objectStoreNames || []);
+            const requestedStores = Array.isArray(storeNames)
+                ? storeNames.filter((storeName) => availableStores.includes(storeName))
+                : [];
+            const storesToRead = requestedStores.length ? requestedStores : availableStores;
+
+            for (const storeName of storesToRead) {
         tables[storeName] = await readStore(db, storeName);
       }
       results.push({
         name,
-        objectStores: Array.from(db.objectStoreNames),
+                objectStores: availableStores,
         tables,
       });
       db.close();
@@ -90,7 +96,9 @@ def ensure_playwright_import() -> tuple[Any, Any]:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
-        raise RuntimeError("Playwright is not installed. Run `pip install playwright` first.") from exc
+        raise RuntimeError(
+            "Playwright is not installed. Run `pip install playwright` first."
+        ) from exc
     return sync_playwright, PlaywrightTimeoutError
 
 
@@ -184,15 +192,23 @@ def extract_indexeddb_payload(
                     else:
                         launch_options["channel"] = "msedge"
 
-                    context = playwright.chromium.launch_persistent_context(**launch_options)
+                    context = playwright.chromium.launch_persistent_context(
+                        **launch_options
+                    )
                     try:
                         page = context.pages[0] if context.pages else context.new_page()
                         attempts: list[dict[str, Any]] = []
                         for url in adapter.iter_probe_urls(origin):
                             try:
-                                page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                                page.goto(
+                                    url,
+                                    wait_until="domcontentloaded",
+                                    timeout=timeout_ms,
+                                )
                                 try:
-                                    page.wait_for_load_state("networkidle", timeout=min(timeout_ms, 4000))
+                                    page.wait_for_load_state(
+                                        "networkidle", timeout=min(timeout_ms, 4000)
+                                    )
                                 except PlaywrightTimeoutError:
                                     pass
 
@@ -208,13 +224,16 @@ def extract_indexeddb_payload(
                                     {
                                         "requested_url": url,
                                         "final_url": page.url,
-                                        "database_count": len(result.get("databases", [])),
+                                        "database_count": len(
+                                            result.get("databases", [])
+                                        ),
                                     }
                                 )
                                 databases = [
                                     database
                                     for database in result.get("databases", [])
-                                    if isinstance(database, dict) and not database.get("error")
+                                    if isinstance(database, dict)
+                                    and not database.get("error")
                                 ]
                                 if databases:
                                     return {
@@ -233,7 +252,9 @@ def extract_indexeddb_payload(
                                         "databases": databases,
                                     }
                             except Exception as exc:
-                                attempts.append({"requested_url": url, "error": str(exc)})
+                                attempts.append(
+                                    {"requested_url": url, "error": str(exc)}
+                                )
                         raise RuntimeError(
                             "No matching IndexedDB databases were found for this Edge profile."
                         )

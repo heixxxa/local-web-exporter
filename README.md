@@ -5,7 +5,7 @@
 ## 当前状态
 
 - `twitter`: 已完成适配，可正常导出
-- `xiaohongshu`: 已加入适配器骨架，尚未实现具体 IndexedDB schema 映射
+- `xiaohongshu`: 已完成首版适配，可导出 note-like 记录（基于常见 schema 的鲁棒解析）
 - `okjike`: 已加入适配器骨架，尚未实现具体 IndexedDB schema 映射
 
 ## 新架构
@@ -42,6 +42,12 @@ social_local/
 
 ```bash
 python main.py --platform twitter -o output/twitter.md
+```
+
+导出小红书内容（可用别名 `xhs` 或 `xiaohongshu`）：
+
+```bash
+python main.py --platform xiaohongshu -o output/xhs.md
 ```
 
 导出 Twitter 并下载媒体：

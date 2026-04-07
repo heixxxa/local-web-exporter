@@ -51,8 +51,12 @@ def render_single_record_markdown(
             "- Capture filter: "
             + ", ".join(f"`{name}`" for name in sorted(context.selected_filters))
         )
-    lines.append(f"- {context.record_label_title} author: @{escape_inline(record.author_handle)}")
-    lines.append(f"- {context.record_label_title} created at: {format_dt(record.created_at)}")
+    lines.append(
+        f"- {context.record_label_title} author: @{escape_inline(record.author_handle)}"
+    )
+    lines.append(
+        f"- {context.record_label_title} created at: {format_dt(record.created_at)}"
+    )
     lines.append("")
     lines.extend(
         render_record_lines(
@@ -128,7 +132,8 @@ def render_record_lines(
         lines.append(f"- URL: {record.url}")
     if record.captured_by:
         lines.append(
-            "- Captured by: " + ", ".join(f"`{name}`" for name in sorted(record.captured_by))
+            "- Captured by: "
+            + ", ".join(f"`{name}`" for name in sorted(record.captured_by))
         )
     if record.first_captured_at:
         lines.append(f"- First captured at: {format_dt(record.first_captured_at)}")
@@ -145,6 +150,7 @@ def render_record_lines(
 
     lines.append("")
     lines.append(record.body_markdown or "_No text content available._")
+    lines.extend(render_related_comments_lines(record, heading_level + 1))
     lines.extend(render_media_lines(media_records or record.media, heading_level + 1))
 
     if record.quote:
@@ -157,13 +163,48 @@ def render_record_lines(
             header += f" · {format_dt(record.quote.created_at)}"
         lines.append(header)
         lines.append(">")
-        for quote_line in (record.quote.text or "No text content available.").splitlines() or [
-            ""
-        ]:
+        for quote_line in (
+            record.quote.text or "No text content available."
+        ).splitlines() or [""]:
             lines.append(f"> {quote_line}")
         if record.quote.url:
             lines.append(">")
             lines.append(f"> {record.quote.url}")
+
+    return lines
+
+
+def render_related_comments_lines(
+    record: ExportRecord,
+    heading_level: int,
+) -> list[str]:
+    raw_comments = record.extra.get("related_comments")
+    if not isinstance(raw_comments, list) or not raw_comments:
+        return []
+
+    lines = ["", f"{'#' * heading_level} Comments", ""]
+    for comment in raw_comments:
+        if not isinstance(comment, dict):
+            continue
+
+        handle = escape_inline(str(comment.get("author_handle") or "unknown"))
+        name = escape_inline(str(comment.get("author_name") or handle))
+        content = str(comment.get("content") or "").strip()
+        like_count = safe_int(comment.get("like_count"), 0)
+
+        timestamp = comment.get("upload_time")
+        time_text = (
+            format_dt(timestamp)
+            if isinstance(timestamp, datetime)
+            else "1970-01-01 00:00:00"
+        )
+
+        lines.append(f"- {name} (@{handle}) · {time_text} · ❤ {like_count}")
+        if content:
+            for line in content.splitlines() or [""]:
+                lines.append(f"  {line}")
+        else:
+            lines.append("  _No text content available._")
 
     return lines
 
@@ -183,7 +224,9 @@ def render_media_lines(
 
 def format_media_asset(media: MediaAsset) -> str:
     if media.local_markdown_path:
-        link_label = escape_link_label(media.filename or Path(media.local_markdown_path).name)
+        link_label = escape_link_label(
+            media.filename or Path(media.local_markdown_path).name
+        )
         line = f"- {media.media_type}: [{link_label}]({media.local_markdown_path})"
         if media.url:
             line += f" · source: {media.url}"
@@ -279,9 +322,7 @@ def render_index_entry(entry: dict[str, Any]) -> str:
 
     label = escape_link_label(f"{created_at} — @{author_handle}")
     line = (
-        f"- [{label}]({markdown_path})"
-        f" · {escape_inline(author_name)}"
-        f" · `{record_id}`"
+        f"- [{label}]({markdown_path}) · {escape_inline(author_name)} · `{record_id}`"
     )
     url = str(entry.get("url") or "").strip()
     if url:

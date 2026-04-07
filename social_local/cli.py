@@ -4,7 +4,7 @@ import argparse
 
 from .browser import default_edge_user_data_dir
 from .exporter import DEFAULT_MEDIA_FILENAME_PATTERN, run_indexeddb_export
-from .platforms import PLATFORM_ADAPTERS, get_platform_adapter
+from .platforms import PLATFORM_ADAPTERS, PLATFORM_ALIASES, get_platform_adapter
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--platform",
         "-p",
-        choices=sorted(PLATFORM_ADAPTERS),
+        choices=sorted(set(PLATFORM_ADAPTERS) | set(PLATFORM_ALIASES)),
         default="x",
         help="Which platform adapter to use.",
     )
