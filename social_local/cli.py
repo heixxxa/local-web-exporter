@@ -25,7 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-md",
         "-o",
         required=True,
-        help="Path to the index Markdown file to write.",
+        help=(
+            "Path to the index Markdown file, or an output directory. "
+            "When a directory is provided, the exporter creates a platform subfolder "
+            "(twitter/xiaohongshu/jike) and writes default .md/.json files there."
+        ),
     )
     parser.add_argument(
         "--record-dir",

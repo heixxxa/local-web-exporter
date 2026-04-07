@@ -29,6 +29,12 @@ LEGACY_PLATFORM_ALIASES: dict[str, str] = {
     "okjike": "jike",
 }
 
+PLATFORM_OUTPUT_FOLDER_NAMES: dict[str, str] = {
+    "x": "twitter",
+    "xhs": "xiaohongshu",
+    "jike": "jike",
+}
+
 
 def parse_multi_values(values: Iterable[str] | None) -> list[str]:
     parsed: list[str] = []
@@ -40,25 +46,46 @@ def parse_multi_values(values: Iterable[str] | None) -> list[str]:
     return parsed
 
 
+def resolve_output_paths(
+    adapter: PlatformAdapter, args: Any
+) -> tuple[Path, Path, Path, Path]:
+    output_arg_raw = str(args.output_md or "")
+    output_arg = Path(output_arg_raw)
+
+    # If -o points to a directory-like path, create a platform folder and default file names in it.
+    is_directory_mode = (
+        output_arg_raw.endswith(("/", "\\")) or output_arg.suffix.lower() != ".md"
+    )
+
+    if is_directory_mode:
+        platform_folder = PLATFORM_OUTPUT_FOLDER_NAMES.get(adapter.key, adapter.key)
+        target_dir = output_arg / platform_folder
+        output_md = target_dir / f"{platform_folder}.md"
+        history_path = target_dir / f"{platform_folder}.history.json"
+        record_dir = target_dir / f"{platform_folder}_{adapter.record_label_plural}"
+        media_dir = target_dir / f"{platform_folder}_media"
+        return output_md, history_path, record_dir, media_dir
+
+    output_md = output_arg
+    history_path = output_md.with_suffix(".history.json")
+    record_dir = output_md.with_name(f"{output_md.stem}_{adapter.record_label_plural}")
+    media_dir = output_md.with_name(f"{output_md.stem}_media")
+    return output_md, history_path, record_dir, media_dir
+
+
 def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
-    output_md = Path(args.output_md)
+    output_md, default_history_path, default_record_dir, default_media_dir = (
+        resolve_output_paths(adapter, args)
+    )
     output_root = output_md.parent
-    record_dir_arg = getattr(args, "record_dir", None) or getattr(args, "tweet_dir", None)
-    record_dir = (
-        Path(record_dir_arg)
-        if record_dir_arg
-        else output_md.with_name(f"{output_md.stem}_{adapter.record_label_plural}")
+    record_dir_arg = getattr(args, "record_dir", None) or getattr(
+        args, "tweet_dir", None
     )
+    record_dir = Path(record_dir_arg) if record_dir_arg else default_record_dir
     history_path = (
-        Path(args.history_file)
-        if args.history_file
-        else output_md.with_suffix(".history.json")
+        Path(args.history_file) if args.history_file else default_history_path
     )
-    media_dir = (
-        Path(args.media_dir)
-        if args.media_dir
-        else output_md.with_name(f"{output_md.stem}_media")
-    )
+    media_dir = Path(args.media_dir) if args.media_dir else default_media_dir
     output_json = Path(args.output_json) if args.output_json else None
     document_title = adapter.resolve_document_title(args.title)
     db_prefix = adapter.resolve_db_prefix(args.db_prefix)
@@ -68,7 +95,9 @@ def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
         adapter=adapter,
         edge_user_data_dir=Path(args.edge_user_data_dir),
         edge_profile_directory=args.edge_profile_directory,
-        edge_executable_path=Path(args.edge_executable_path) if args.edge_executable_path else None,
+        edge_executable_path=Path(args.edge_executable_path)
+        if args.edge_executable_path
+        else None,
         origin=args.origin,
         db_prefix=db_prefix,
         db_names=db_names,
@@ -93,7 +122,9 @@ def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
         reverse=args.descending,
     )
 
-    database_name = ", ".join(payload.database_names) if payload.database_names else None
+    database_name = (
+        ", ".join(payload.database_names) if payload.database_names else None
+    )
     source_label = (
         "Microsoft Edge IndexedDB via Playwright "
         f"({extracted.get('origin') or 'unknown origin'})"
@@ -105,10 +136,16 @@ def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
         selected_filters=list(selection.selected_filters),
     )
 
-    history = empty_export_history() if args.ignore_history else load_export_history(history_path)
+    history = (
+        empty_export_history()
+        if args.ignore_history
+        else load_export_history(history_path)
+    )
     history_entries = history.setdefault("records", {})
     should_export_media = args.export_media or args.run_aria2
-    should_prepare_media = should_export_media or bool(args.aria2_input_file) or args.run_aria2
+    should_prepare_media = (
+        should_export_media or bool(args.aria2_input_file) or args.run_aria2
+    )
     records_to_write: list[ExportRecord] = []
     skipped_by_history = 0
 
@@ -135,7 +172,10 @@ def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
             skipped_by_history += 1
 
     media_records = (
-        build_media_records(records_to_write, args.media_filename_pattern or DEFAULT_MEDIA_FILENAME_PATTERN)
+        build_media_records(
+            records_to_write,
+            args.media_filename_pattern or DEFAULT_MEDIA_FILENAME_PATTERN,
+        )
         if records_to_write and should_prepare_media
         else []
     )
@@ -164,7 +204,9 @@ def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
                 split=args.aria2_split,
             )
     elif (args.aria2_input_file or args.run_aria2) and not media_records:
-        print("No media URLs found in the records being exported; skipping aria2 output.")
+        print(
+            "No media URLs found in the records being exported; skipping aria2 output."
+        )
 
     if media_records and args.export_media and not args.run_aria2:
         downloaded_count, reused_count, failed_count = download_media_files(
@@ -188,7 +230,9 @@ def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
         markdown = render_single_record_markdown(
             context=context,
             record=record,
-            media_records=prepare_media_records_for_markdown(record_media, record_path.parent)
+            media_records=prepare_media_records_for_markdown(
+                record_media, record_path.parent
+            )
             if should_export_media and record_media is not None
             else None,
         )
@@ -258,7 +302,9 @@ def load_export_history(path: Path) -> dict[str, Any]:
             entry_platform = str(entry_copy.get("platform") or old_platform or "")
             normalized_platform = normalize_platform_key(entry_platform)
             entry_copy["platform"] = normalized_platform
-            migrated["records"][build_history_key_from_parts(normalized_platform, record_id)] = entry_copy
+            migrated["records"][
+                build_history_key_from_parts(normalized_platform, record_id)
+            ] = entry_copy
         migrated["version"] = safe_int(raw.get("version"), 2)
         return migrated
 
@@ -270,11 +316,17 @@ def load_export_history(path: Path) -> dict[str, Any]:
                 continue
             migrated_entry = dict(entry)
             migrated_entry.setdefault("platform", "x")
-            migrated_entry.setdefault("record_id", migrated_entry.get("tweet_id") or str(tweet_id))
-            migrated_entry.setdefault("author_handle", migrated_entry.get("screen_name"))
+            migrated_entry.setdefault(
+                "record_id", migrated_entry.get("tweet_id") or str(tweet_id)
+            )
+            migrated_entry.setdefault(
+                "author_handle", migrated_entry.get("screen_name")
+            )
             migrated_entry.setdefault("author_name", migrated_entry.get("display_name"))
             migrated_entry.pop("tweet_id", None)
-            migrated["records"][build_history_key_from_parts("x", str(tweet_id))] = migrated_entry
+            migrated["records"][build_history_key_from_parts("x", str(tweet_id))] = (
+                migrated_entry
+            )
     return migrated
 
 
@@ -518,11 +570,16 @@ def build_history_entry(
 ) -> dict[str, Any]:
     previous_media_files = (
         previous_entry.get("media_files")
-        if isinstance(previous_entry, dict) and isinstance(previous_entry.get("media_files"), list)
+        if isinstance(previous_entry, dict)
+        and isinstance(previous_entry.get("media_files"), list)
         else []
     )
     if media_records is None:
-        media_count = safe_int(previous_entry.get("media_count"), 0) if previous_entry else len(record.media)
+        media_count = (
+            safe_int(previous_entry.get("media_count"), 0)
+            if previous_entry
+            else len(record.media)
+        )
         media_files = previous_media_files
     else:
         media_count = len(media_records)
@@ -537,7 +594,9 @@ def build_history_entry(
             if media_record_is_available(media)
         ]
 
-    previous_media_exported = bool(previous_entry and previous_entry.get("media_exported"))
+    previous_media_exported = bool(
+        previous_entry and previous_entry.get("media_exported")
+    )
     media_exported_now = media_count == 0 or (
         media_export_requested and len(media_files) >= media_count
     )
@@ -550,7 +609,9 @@ def build_history_entry(
         "url": record.url,
         "created_at": record.created_at.isoformat(),
         "updated_at": record.updated_at.isoformat(),
-        "first_captured_at": record.first_captured_at.isoformat() if record.first_captured_at else None,
+        "first_captured_at": record.first_captured_at.isoformat()
+        if record.first_captured_at
+        else None,
         "exported_at": datetime.now().astimezone().isoformat(),
         "media_count": media_count,
         "media_exported": previous_media_exported or media_exported_now,
