@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import html
 from dataclasses import replace
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Sequence
 
 from .models import ExportContext, ExportRecord, MediaAsset
@@ -40,23 +40,29 @@ def render_single_record_markdown(
     media_records: Sequence[MediaAsset] | None = None,
 ) -> str:
     lines: list[str] = []
-    lines.append(f"# {context.document_title}")
-    lines.append("")
-    lines.append(f"- Generated at: {format_dt(datetime.now().astimezone())}")
-    lines.append(f"- Source: `{context.source_label}`")
+    metadata: dict[str, Any] = {
+        "document_title": context.document_title,
+        "generated_at": format_dt(datetime.now().astimezone()),
+        "source": context.source_label,
+        "record_type": context.record_label_singular,
+        "record_id": record.record_id,
+        "author_handle": record.author_handle,
+        "author_name": record.author_name,
+        "created_at": format_dt(record.created_at),
+    }
     if context.database_name:
-        lines.append(f"- IndexedDB database: `{context.database_name}`")
+        metadata["indexeddb_database"] = context.database_name
     if context.selected_filters:
-        lines.append(
-            "- Capture filter: "
-            + ", ".join(f"`{name}`" for name in sorted(context.selected_filters))
-        )
-    lines.append(
-        f"- {context.record_label_title} author: @{escape_inline(record.author_handle)}"
-    )
-    lines.append(
-        f"- {context.record_label_title} created at: {format_dt(record.created_at)}"
-    )
+        metadata["capture_filter"] = sorted(context.selected_filters)
+    if record.url:
+        metadata["url"] = record.url
+    if record.captured_by:
+        metadata["captured_by"] = sorted(record.captured_by)
+    if record.first_captured_at:
+        metadata["first_captured_at"] = format_dt(record.first_captured_at)
+    if record.reply_url:
+        metadata["reply_url"] = record.reply_url
+    lines.extend(render_yaml_front_matter(metadata))
     lines.append("")
     lines.extend(
         render_record_lines(
@@ -76,18 +82,18 @@ def render_records_markdown(
     records: Sequence[ExportRecord],
 ) -> str:
     lines: list[str] = []
-    lines.append(f"# {context.document_title}")
-    lines.append("")
-    lines.append(f"- Generated at: {format_dt(datetime.now().astimezone())}")
-    lines.append(f"- Source: `{context.source_label}`")
+    metadata: dict[str, Any] = {
+        "document_title": context.document_title,
+        "generated_at": format_dt(datetime.now().astimezone()),
+        "source": context.source_label,
+        "record_type": context.record_label_plural,
+        "record_count": len(records),
+    }
     if context.database_name:
-        lines.append(f"- IndexedDB database: `{context.database_name}`")
+        metadata["indexeddb_database"] = context.database_name
     if context.selected_filters:
-        lines.append(
-            "- Capture filter: "
-            + ", ".join(f"`{name}`" for name in sorted(context.selected_filters))
-        )
-    lines.append(f"- {context.record_label_plural.title()} count: {len(records)}")
+        metadata["capture_filter"] = sorted(context.selected_filters)
+    lines.extend(render_yaml_front_matter(metadata))
 
     if not records:
         lines.append("")
@@ -124,32 +130,17 @@ def render_record_lines(
     if heading_text:
         lines.extend([f"{'#' * heading_level} {heading_text}", ""])
 
-    lines.append(f"- {context.record_label_title} ID: `{record.record_id}`")
-    lines.append(
-        f"- Author: {escape_inline(record.author_name)} (@{escape_inline(record.author_handle)})"
-    )
-    if record.url:
-        lines.append(f"- URL: {record.url}")
-    if record.captured_by:
-        lines.append(
-            "- Captured by: "
-            + ", ".join(f"`{name}`" for name in sorted(record.captured_by))
-        )
-    if record.first_captured_at:
-        lines.append(f"- First captured at: {format_dt(record.first_captured_at)}")
+    lines.append(record.body_markdown or "_No text content available._")
     if record.stats_line:
-        lines.append(f"- Stats: {record.stats_line}")
-    if record.reply_url:
-        lines.append(f"- In reply to: {record.reply_url}")
+        lines.append("")
+        lines.append(f"> Stats: {record.stats_line}")
     if record.repost_source_handle and record.repost_source_url:
         repost_label = str(record.extra.get("repost_label") or "Repost source")
+        lines.append("")
         lines.append(
-            f"- {repost_label}: "
-            f"@{escape_inline(record.repost_source_handle)} — {record.repost_source_url}"
+            f"> {repost_label}: "
+            f"@{escape_inline(record.repost_source_handle)} - {record.repost_source_url}"
         )
-
-    lines.append("")
-    lines.append(record.body_markdown or "_No text content available._")
     lines.extend(render_related_comments_lines(record, heading_level + 1))
     lines.extend(render_media_lines(media_records or record.media, heading_level + 1))
 
@@ -223,23 +214,72 @@ def render_media_lines(
 
 
 def format_media_asset(media: MediaAsset) -> str:
-    if media.local_markdown_path:
-        link_label = escape_link_label(
-            media.filename or Path(media.local_markdown_path).name
-        )
-        line = f"- {media.media_type}: [{link_label}]({media.local_markdown_path})"
-        if media.url:
-            line += f" · source: {media.url}"
-    elif media.url:
-        line = f"- {media.media_type}: {media.url}"
-    else:
-        line = f"- {media.media_type}"
+    media_kind = media.media_type.lower()
+    media_label = html.escape(media.media_type)
+    display_src = media.local_markdown_path or media.url
+    escaped_src = html.escape(display_src) if display_src else ""
+    alt_text = html.escape(media.alt_text or media.filename or media.media_type)
+    parts: list[str] = [f'<figure class="media-item" data-media-type="{media_label}">']
 
+    if display_src and "video" in media_kind:
+        parts.append(f'  <video controls src="{escaped_src}"></video>')
+    elif display_src and (
+        "image" in media_kind or "photo" in media_kind or "gif" in media_kind
+    ):
+        parts.append(f'  <img src="{escaped_src}" alt="{alt_text}" loading="lazy" />')
+    elif display_src:
+        parts.append(
+            f'  <a href="{escaped_src}" target="_blank" rel="noopener noreferrer">{alt_text}</a>'
+        )
+    else:
+        parts.append(f"  <figcaption>{media_label}</figcaption>")
+
+    metadata: list[str] = []
+    if media.url and media.local_markdown_path:
+        metadata.append(
+            f'source: <a href="{html.escape(media.url)}" target="_blank" rel="noopener noreferrer">{html.escape(media.url)}</a>'
+        )
     if media.alt_text:
-        line += f" · alt: {escape_inline(media.alt_text)}"
+        metadata.append(f"alt: {html.escape(media.alt_text)}")
     if media.download_error:
-        line += f" · download failed: {escape_inline(media.download_error)}"
-    return line
+        metadata.append(f"download failed: {html.escape(media.download_error)}")
+    if metadata:
+        parts.append(f"  <figcaption>{' | '.join(metadata)}</figcaption>")
+
+    parts.append("</figure>")
+    return "\n".join(parts)
+
+
+def render_yaml_front_matter(metadata: dict[str, Any]) -> list[str]:
+    lines = ["---"]
+    for key, value in metadata.items():
+        lines.extend(render_yaml_key_value(key, value))
+    lines.append("---")
+    return lines
+
+
+def render_yaml_key_value(key: str, value: Any) -> list[str]:
+    if isinstance(value, list):
+        if not value:
+            return [f"{key}: []"]
+        lines = [f"{key}:"]
+        for item in value:
+            lines.append(f"  - {yaml_scalar(item)}")
+        return lines
+    return [f"{key}: {yaml_scalar(value)}"]
+
+
+def yaml_scalar(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+
+    text = str(value).replace("\r\n", "\\n").replace("\n", "\\n")
+    escaped = text.replace("'", "''")
+    return f"'{escaped}'"
 
 
 def with_local_markdown_path(media: MediaAsset, markdown_path: str) -> MediaAsset:
@@ -263,21 +303,21 @@ def render_export_index(
     )
 
     lines: list[str] = []
-    lines.append(f"# {context.document_title}")
-    lines.append("")
-    lines.append(f"- Generated at: {format_dt(datetime.now().astimezone())}")
-    lines.append(f"- Source: `{context.source_label}`")
+    metadata: dict[str, Any] = {
+        "document_title": context.document_title,
+        "generated_at": format_dt(datetime.now().astimezone()),
+        "source": context.source_label,
+        "record_type": context.record_label_plural,
+        "selected_this_run": selected_count,
+        "newly_written_this_run": written_count,
+        "skipped_by_history": skipped_count,
+        "archived_total": len(visible_entries),
+    }
     if context.database_name:
-        lines.append(f"- IndexedDB database: `{context.database_name}`")
+        metadata["indexeddb_database"] = context.database_name
     if context.selected_filters:
-        lines.append(
-            "- Capture filter: "
-            + ", ".join(f"`{name}`" for name in sorted(context.selected_filters))
-        )
-    lines.append(f"- Selected {context.record_label_plural} this run: {selected_count}")
-    lines.append(f"- Newly written this run: {written_count}")
-    lines.append(f"- Skipped by history: {skipped_count}")
-    lines.append(f"- Archived {context.record_label_plural}: {len(visible_entries)}")
+        metadata["capture_filter"] = sorted(context.selected_filters)
+    lines.extend(render_yaml_front_matter(metadata))
 
     if not visible_entries:
         lines.append("")
