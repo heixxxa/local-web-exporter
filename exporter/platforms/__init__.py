@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .base import PlatformAdapter
+from ..core import PlatformAdapter
 from .okjike import OkjikeAdapter
 from .twitter import TwitterAdapter
 from .xiaohongshu import XiaohongshuAdapter

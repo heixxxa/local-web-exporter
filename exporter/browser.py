@@ -5,9 +5,10 @@ import shutil
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .platforms.base import PlatformAdapter
+if TYPE_CHECKING:
+    from .core import PlatformAdapter
 
 INDEXEDDB_EVAL = r"""
 async ({ dbPrefix, dbNames, storeNames }) => {

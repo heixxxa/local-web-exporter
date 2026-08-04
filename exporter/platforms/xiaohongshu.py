@@ -3,11 +3,16 @@ from __future__ import annotations
 import argparse
 import re
 from argparse import Namespace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from ..models import ExportRecord, MediaAsset, PlatformPayload, SelectionResult
-from .base import PlatformAdapter
+from ..core import (
+    ExportRecord,
+    MediaAsset,
+    PlatformAdapter,
+    PlatformPayload,
+    SelectionResult,
+)
 
 
 class XiaohongshuAdapter(PlatformAdapter):
@@ -17,22 +22,7 @@ class XiaohongshuAdapter(PlatformAdapter):
     record_label_plural = "posts"
     supported_origins = ("www.xiaohongshu.com", "xiaohongshu.com")
     probe_paths = ("/explore", "/", "/robots.txt")
-    store_names = (
-        "note",
-        "notes",
-        "noteCache",
-        "note_cache",
-        "noteCard",
-        "note_card",
-        "noteDetail",
-        "note_detail",
-        "explore",
-        "feeds",
-        "feed",
-        "search",
-        "user",
-        "users",
-    )
+    store_names = ("xhs_notes", "xhs_comments")
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
@@ -115,10 +105,10 @@ class XiaohongshuAdapter(PlatformAdapter):
     ) -> SelectionResult:
         author_filters = parse_csv_values(getattr(args, "author_handles", None))
         keyword_filters = parse_csv_values(getattr(args, "keywords", None))
-        include_all_records = bool(getattr(args, "all_records", False))
-
-        note_candidates = extract_note_candidates(payload.tables)
-        comments_by_note = extract_comments_by_note(payload.tables)
+        note_tables = select_named_tables(payload.tables, "xhs_notes")
+        comment_tables = select_named_tables(payload.tables, "xhs_comments")
+        note_candidates = extract_note_candidates(note_tables)
+        comments_by_note = extract_comments_by_note(comment_tables)
         records_by_id: dict[str, ExportRecord] = {}
         captured_by_map: dict[str, set[str]] = {}
 
@@ -128,8 +118,6 @@ class XiaohongshuAdapter(PlatformAdapter):
                 continue
 
             record = build_export_record(note)
-            if not include_all_records and not record.body_markdown.strip():
-                continue
             if author_filters and record.author_handle not in author_filters:
                 continue
             if keyword_filters and not record_matches_keywords(record, keyword_filters):
@@ -167,6 +155,17 @@ class XiaohongshuAdapter(PlatformAdapter):
             )
 
         return SelectionResult(records=records, selected_filters=selected_filters)
+
+
+def select_named_tables(
+    tables: dict[str, list[dict[str, Any]]],
+    expected_name: str,
+) -> dict[str, list[dict[str, Any]]]:
+    return {
+        table_name: rows
+        for table_name, rows in tables.items()
+        if table_name.lower() == expected_name
+    }
 
 
 def parse_csv_values(raw: str | None) -> set[str]:
@@ -630,7 +629,7 @@ def parse_xhs_datetime(value: Any) -> datetime:
         if timestamp > 10_000_000_000:
             timestamp = timestamp / 1000
         try:
-            return datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone()
+            return datetime.fromtimestamp(timestamp, tz=UTC).astimezone()
         except (OverflowError, OSError, ValueError):
             return epoch_datetime()
 
@@ -655,9 +654,9 @@ def parse_xhs_datetime(value: Any) -> datetime:
 
 def epoch_datetime() -> datetime:
     try:
-        return datetime.fromtimestamp(0, tz=timezone.utc).astimezone()
+        return datetime.fromtimestamp(0, tz=UTC).astimezone()
     except (OverflowError, OSError, ValueError):
-        return datetime(1970, 1, 1, tzinfo=timezone.utc)
+        return datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def cleanup_text(text: str) -> str:

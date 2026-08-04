@@ -1,5 +1,5 @@
 [project]
-name = "twitter-local"
+name = "local-web-exporter"
 version = "0.1.0"
 description = "IndexedDB-to-Markdown exporter with platform adapters for social sites."
 readme = "README.md"

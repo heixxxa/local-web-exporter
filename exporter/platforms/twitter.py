@@ -10,20 +10,18 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
-from ..models import (
+from ..core import (
     ExportRecord,
     MediaAsset,
+    PlatformAdapter,
     PlatformPayload,
     QuoteRecord,
     SelectionResult,
-)
-from ..rendering import (
     format_dt,
     render_record_lines,
     render_records_markdown,
     render_single_record_markdown,
 )
-from .base import PlatformAdapter
 
 SUPPORTED_CAPTURE_TYPES = {"tweet", None}
 
@@ -42,16 +40,6 @@ class TwitterAdapter(PlatformAdapter):
             help=(
                 "Comma-separated capture extensions to keep, such as "
                 "BookmarksModule,LikesModule,UserTweetsModule."
-            ),
-        )
-        parser.add_argument(
-            "--all-records",
-            "--all-tweets",
-            dest="all_records",
-            action="store_true",
-            help=(
-                "Export every tweet found in the tweets table, not just rows "
-                "referenced by captures."
             ),
         )
 
@@ -78,7 +66,11 @@ class TwitterAdapter(PlatformAdapter):
             if name:
                 database_names.append(name)
 
-            tables = database.get("tables") if isinstance(database.get("tables"), dict) else {}
+            tables = (
+                database.get("tables")
+                if isinstance(database.get("tables"), dict)
+                else {}
+            )
             for tweet in tables.get("tweets", []):
                 if not isinstance(tweet, dict):
                     continue
@@ -87,7 +79,9 @@ class TwitterAdapter(PlatformAdapter):
                     continue
 
                 current = tweet_map.get(tweet_id)
-                if current is None or get_updated_datetime(tweet) > get_updated_datetime(current):
+                if current is None or get_updated_datetime(
+                    tweet
+                ) > get_updated_datetime(current):
                     tweet_map[tweet_id] = tweet
 
             for capture in tables.get("captures", []):
@@ -128,7 +122,6 @@ class TwitterAdapter(PlatformAdapter):
             payload.tables.get("tweets", []),
             payload.tables.get("captures", []),
             selected_extensions,
-            bool(getattr(args, "all_records", False)),
         )
         records = [
             build_export_record(tweet, captures_by_tweet.get(get_tweet_id(tweet), []))
@@ -189,7 +182,9 @@ def build_export_record(
         first_captured_at=first_capture_datetime(captures),
         stats_line=build_stats_line(tweet),
         reply_url=get_reply_url(tweet),
-        repost_source_handle=retweet_screen_name if retweet_url and retweet_screen_name else None,
+        repost_source_handle=retweet_screen_name
+        if retweet_url and retweet_screen_name
+        else None,
         repost_source_url=retweet_url,
         quote=quote_record,
         media=media_assets,
@@ -238,11 +233,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Sort newest-first instead of oldest-first.",
     )
     parser.add_argument(
-        "--all-tweets",
-        action="store_true",
-        help="Export every tweet found in the `tweets` table, not just rows referenced by `captures`.",
-    )
-    parser.add_argument(
         "--title",
         default="Twitter Export Restore",
         help="Document title written at the top of the Markdown file.",
@@ -275,7 +265,6 @@ def legacy_main() -> int:
         payload["tweets"],
         payload["captures"],
         selected_extensions,
-        args.all_tweets,
     )
     tweets.sort(
         key=lambda tweet: tweet_sort_key(
@@ -313,7 +302,9 @@ def load_payload(root: Any) -> dict[str, Any]:
 
     if isinstance(root, dict) and isinstance(root.get("tweets"), list):
         tweets = [row for row in root["tweets"] if looks_like_tweet(row)]
-        captures = root.get("captures") if isinstance(root.get("captures"), list) else []
+        captures = (
+            root.get("captures") if isinstance(root.get("captures"), list) else []
+        )
         return {
             "tweets": tweets,
             "captures": captures,
@@ -389,19 +380,15 @@ def select_tweets(
     tweets: list[dict[str, Any]],
     captures: list[dict[str, Any]],
     selected_extensions: set[str] | None,
-    include_all_tweets: bool,
 ) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
     tweet_map = {get_tweet_id(tweet): tweet for tweet in tweets if get_tweet_id(tweet)}
     captures_by_tweet: dict[str, list[dict[str, Any]]] = {}
-    has_tweet_captures = False
 
     for capture in captures:
         if not isinstance(capture, dict):
             continue
         if capture.get("type") not in SUPPORTED_CAPTURE_TYPES:
             continue
-        has_tweet_captures = True
-
         tweet_id = str(capture.get("data_key") or "").strip()
         if not tweet_id:
             continue
@@ -409,15 +396,11 @@ def select_tweets(
             continue
         captures_by_tweet.setdefault(tweet_id, []).append(capture)
 
-    if include_all_tweets:
-        return list(tweet_map.values()), captures_by_tweet
-
-    if captures_by_tweet:
-        selected_ids = [tweet_id for tweet_id in captures_by_tweet if tweet_id in tweet_map]
+    if selected_extensions:
+        selected_ids = [
+            tweet_id for tweet_id in captures_by_tweet if tweet_id in tweet_map
+        ]
         return [tweet_map[tweet_id] for tweet_id in selected_ids], captures_by_tweet
-
-    if has_tweet_captures or selected_extensions:
-        return [], captures_by_tweet
 
     return list(tweet_map.values()), captures_by_tweet
 
@@ -525,10 +508,16 @@ def render_tweet_text(tweet: dict[str, Any]) -> str:
 
     if note_tweet:
         text = str(note_tweet.get("text") or "")
-        entities = note_tweet.get("entity_set") if isinstance(note_tweet.get("entity_set"), dict) else {}
+        entities = (
+            note_tweet.get("entity_set")
+            if isinstance(note_tweet.get("entity_set"), dict)
+            else {}
+        )
     else:
         text = str(legacy.get("full_text") or "")
-        entities = legacy.get("entities") if isinstance(legacy.get("entities"), dict) else {}
+        entities = (
+            legacy.get("entities") if isinstance(legacy.get("entities"), dict) else {}
+        )
 
     quoted_permalink = None
     quoted_status_permalink = legacy.get("quoted_status_permalink")
@@ -565,8 +554,12 @@ def replace_url_entities(text: str, urls: Any, quoted_permalink: str | None) -> 
 
 
 def strip_media_shortlinks(text: str, legacy: dict[str, Any]) -> str:
-    entities = legacy.get("entities") if isinstance(legacy.get("entities"), dict) else {}
-    media_entities = entities.get("media") if isinstance(entities.get("media"), list) else []
+    entities = (
+        legacy.get("entities") if isinstance(legacy.get("entities"), dict) else {}
+    )
+    media_entities = (
+        entities.get("media") if isinstance(entities.get("media"), list) else []
+    )
     short_urls = sorted(
         [
             str(media.get("url") or "")
@@ -632,10 +625,14 @@ def extract_tweet_union(value: Any) -> dict[str, Any] | None:
 
 def extract_tweet_media(tweet: dict[str, Any]) -> list[dict[str, Any]]:
     real_tweet = extract_retweeted_tweet(tweet) or tweet
-    legacy = real_tweet.get("legacy") if isinstance(real_tweet.get("legacy"), dict) else {}
+    legacy = (
+        real_tweet.get("legacy") if isinstance(real_tweet.get("legacy"), dict) else {}
+    )
 
     extended_entities = legacy.get("extended_entities")
-    if isinstance(extended_entities, dict) and isinstance(extended_entities.get("media"), list):
+    if isinstance(extended_entities, dict) and isinstance(
+        extended_entities.get("media"), list
+    ):
         return [item for item in extended_entities["media"] if isinstance(item, dict)]
 
     entities = legacy.get("entities")
@@ -648,8 +645,14 @@ def extract_tweet_media(tweet: dict[str, Any]) -> list[dict[str, Any]]:
 def get_media_original_url(media: dict[str, Any]) -> str:
     media_type = media.get("type")
     if media_type in {"video", "animated_gif"}:
-        video_info = media.get("video_info") if isinstance(media.get("video_info"), dict) else {}
-        variants = video_info.get("variants") if isinstance(video_info.get("variants"), list) else []
+        video_info = (
+            media.get("video_info") if isinstance(media.get("video_info"), dict) else {}
+        )
+        variants = (
+            video_info.get("variants")
+            if isinstance(video_info.get("variants"), list)
+            else []
+        )
         best_variant: dict[str, Any] | None = None
         best_bitrate = -1
         for variant in variants:
@@ -749,17 +752,29 @@ def get_created_datetime(tweet: dict[str, Any]) -> datetime:
         except (TypeError, ValueError, IndexError):
             pass
 
-    private_fields = tweet.get("twe_private_fields") if isinstance(tweet.get("twe_private_fields"), dict) else {}
+    private_fields = (
+        tweet.get("twe_private_fields")
+        if isinstance(tweet.get("twe_private_fields"), dict)
+        else {}
+    )
     return from_millis(private_fields.get("created_at"))
 
 
 def get_updated_datetime(tweet: dict[str, Any]) -> datetime:
-    private_fields = tweet.get("twe_private_fields") if isinstance(tweet.get("twe_private_fields"), dict) else {}
+    private_fields = (
+        tweet.get("twe_private_fields")
+        if isinstance(tweet.get("twe_private_fields"), dict)
+        else {}
+    )
     return from_millis(private_fields.get("updated_at"))
 
 
 def first_capture_datetime(captures: list[dict[str, Any]]) -> datetime | None:
-    timestamps = [capture.get("created_at") for capture in captures if capture.get("created_at") is not None]
+    timestamps = [
+        capture.get("created_at")
+        for capture in captures
+        if capture.get("created_at") is not None
+    ]
     if not timestamps:
         return None
     return from_millis(min(timestamps))
@@ -787,7 +802,11 @@ def from_millis(value: Any) -> datetime:
 
 
 def looks_like_tweet(value: Any) -> bool:
-    return isinstance(value, dict) and bool(get_tweet_id(value)) and isinstance(value.get("legacy"), dict)
+    return (
+        isinstance(value, dict)
+        and bool(get_tweet_id(value))
+        and isinstance(value.get("legacy"), dict)
+    )
 
 
 def escape_link_label(value: str) -> str:

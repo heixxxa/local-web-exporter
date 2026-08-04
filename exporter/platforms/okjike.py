@@ -6,8 +6,13 @@ from argparse import Namespace
 from datetime import datetime
 from typing import Any
 
-from ..models import ExportRecord, MediaAsset, PlatformPayload, SelectionResult
-from .base import PlatformAdapter
+from ..core import (
+    ExportRecord,
+    MediaAsset,
+    PlatformAdapter,
+    PlatformPayload,
+    SelectionResult,
+)
 
 
 class OkjikeAdapter(PlatformAdapter):
@@ -155,13 +160,10 @@ class OkjikeAdapter(PlatformAdapter):
         selected_extensions = parse_extensions(getattr(args, "extensions", None))
         author_filters = parse_csv_values(getattr(args, "author_handles", None))
         keyword_filters = parse_csv_values(getattr(args, "keywords", None))
-        include_all_records = bool(getattr(args, "all_records", False))
-
         posts, captures_by_post = select_posts(
             payload.tables.get("jike_posts", []),
             payload.tables.get("captures", []),
             selected_extensions,
-            include_all_records,
         )
         comments_by_post = group_comments_by_post(
             payload.tables.get("jike_comments", [])
@@ -222,7 +224,6 @@ def select_posts(
     posts: list[dict[str, Any]],
     captures: list[dict[str, Any]],
     selected_extensions: set[str] | None,
-    include_all_posts: bool,
 ) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
     post_map: dict[str, dict[str, Any]] = {}
     for post in posts:
@@ -253,9 +254,6 @@ def select_posts(
         if not post_id:
             continue
         captures_by_post.setdefault(post_id, []).append(capture)
-
-    if include_all_posts:
-        return list(post_map.values()), captures_by_post
 
     if captures_by_post:
         selected_ids = [post_id for post_id in captures_by_post if post_id in post_map]

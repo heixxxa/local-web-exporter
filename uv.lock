@@ -46,6 +46,17 @@ wheels = [
 ]
 
 [[package]]
+name = "local-web-exporter"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "playwright" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "playwright", specifier = ">=1.58.0" }]
+
+[[package]]
 name = "playwright"
 version = "1.58.0"
 source = { registry = "https://pypi.org/simple" }
@@ -75,17 +86,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/8b/04/e7c1fe4dc78a6fdbf
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/c4/b4d4827c93ef43c01f599ef31453ccc1c132b353284fc6c87d535c233129/pyee-13.0.1-py3-none-any.whl", hash = "sha256:af2f8fede4171ef667dfded53f96e2ed0d6e6bd7ee3bb46437f77e3b57689228", size = 15659, upload-time = "2026-02-14T21:12:26.263Z" },
 ]
-
-[[package]]
-name = "twitter-local"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "playwright" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "playwright", specifier = ">=1.58.0" }]
 
 [[package]]
 name = "typing-extensions"
