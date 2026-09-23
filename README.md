@@ -95,6 +95,16 @@ output/
 
 旧版高级参数仍然兼容，但不再显示在常规帮助中。
 
+## 增量读取与性能
+
+默认仅复制目标站点的 IndexedDB（含 blob 文件），保留临时配置隔离。完全关闭 Edge 后，可用 `uv run main.py twitter --no-copy-indexeddb` 直接读取原始配置，省去复制耗时。
+
+Twitter 不再读取 `users`，也不再等待页面 `networkidle`。历史记录在浏览器启动前加载；仅当 Markdown 和本次要求的媒体文件均已存在时，才在浏览器端跳过该条记录。缺失文件或媒体下载未完成的内容仍会补导，`--fresh` 会重新读取全部目标内容。
+
+使用 `--extensions BookmarksModule` 等筛选时，先从 captures 获取目标 ID（优先使用 extension 索引），再在 `rest_id` 主键 schema 下按键读取 tweets。未指定 extension 时仍导出无 capture 的推文，通过键游标跳过已归档内容；其他 schema 使用值游标兼容读取，仅将待导出记录传回 Python。多个数据库之间的 capture 引用仍会合并处理。
+
+`--output-json` 保持完整的目标表导出，不应用浏览器端增量筛选。没有新增写入时不重写 history；索引仍按本次参数更新。历史文件检查、captures 扫描（无可用索引时）和索引生成仍随数据量增长；本次未迁移 SQLite 或增加 CDP 连接模式。
+
 ## 如何扩展新平台
 
 新增平台时，重点实现 `exporter/platforms/<platform>.py` 中的适配器：

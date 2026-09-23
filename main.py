@@ -47,6 +47,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="忽略历史记录并重新导出。",
     )
+    parser.add_argument(
+        "--no-copy-indexeddb", dest="copy_indexeddb", action="store_false",
+        help="直接读取原始 Edge 配置，省去复制耗时；使用前需完全关闭 Edge。",
+    )
 
     # Keep the old interface working without crowding the normal help output.
     hidden = argparse.SUPPRESS
@@ -76,7 +80,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db-name", action="append", default=[], help=hidden)
     parser.add_argument("--db-prefix", help=hidden)
     parser.add_argument("--timeout-ms", type=int, default=15000, help=hidden)
-    parser.add_argument("--no-copy-indexeddb", dest="copy_indexeddb", action="store_false", help=hidden)
     parser.add_argument("--keep-temp-profile", action="store_true", help=hidden)
     parser.add_argument("--ignore-history", dest="ignore_history", action="store_true", help=hidden)
     parser.add_argument("--export-media", dest="export_media", action="store_true", help=hidden)

@@ -91,6 +91,11 @@ class PlatformAdapter(ABC):
     def add_arguments(self, parser: ArgumentParser) -> None:
         del parser
 
+    def browser_read_options(
+        self, args: Namespace, existing_ids: set[str]
+    ) -> dict[str, Any]:
+        return {}
+
     def default_document_title(self) -> str:
         return f"{self.display_name} Export Restore"
 
@@ -641,6 +646,26 @@ def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
     db_prefix = adapter.resolve_db_prefix(args.db_prefix)
     db_names = parse_multi_values(args.db_name)
 
+    history = (
+        empty_export_history()
+        if args.ignore_history
+        else load_export_history(history_path)
+    )
+    history_entries = history.setdefault("records", {})
+    should_export_media = args.export_media or args.run_aria2
+    should_prepare_media = should_export_media or bool(args.aria2_input_file)
+    existing_ids = {
+        key.partition(":")[2]
+        for key, entry in history_entries.items()
+        if isinstance(entry, dict)
+        and entry.get("platform") == adapter.key
+        and markdown_artifact_exists(entry, output_root)
+        and (
+            not should_export_media
+            or (entry.get("media_exported") and media_artifacts_exist(entry, output_root))
+        )
+    }
+
     extracted = extract_indexeddb_payload(
         adapter=adapter,
         edge_user_data_dir=Path(args.edge_user_data_dir),
@@ -655,6 +680,8 @@ def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
         headed=args.headed,
         copy_indexeddb=args.copy_indexeddb,
         keep_temp_profile=args.keep_temp_profile,
+        read_options=adapter.browser_read_options(args, existing_ids)
+        if not output_json else {},
     )
 
     if output_json:
@@ -686,18 +713,8 @@ def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
         selected_filters=list(selection.selected_filters),
     )
 
-    history = (
-        empty_export_history()
-        if args.ignore_history
-        else load_export_history(history_path)
-    )
-    history_entries = history.setdefault("records", {})
-    should_export_media = args.export_media or args.run_aria2
-    should_prepare_media = (
-        should_export_media or bool(args.aria2_input_file) or args.run_aria2
-    )
     records_to_write: list[ExportRecord] = []
-    skipped_by_history = 0
+    skipped_by_history = len(extracted.get("skipped_ids", []))
 
     for record in records:
         history_key = build_history_key(adapter, record.record_id)
@@ -808,17 +825,18 @@ def run_indexeddb_export(adapter: PlatformAdapter, args: Any) -> int:
     index_markdown = render_export_index(
         context=context,
         history_entries=platform_history_entries,
-        selected_count=len(records),
+        selected_count=len(records) + len(extracted.get("skipped_ids", [])),
         written_count=written_count,
         skipped_count=skipped_by_history,
         sort_by=args.sort_by,
         descending=args.descending,
     )
     output_md.write_text(index_markdown, encoding="utf-8")
-    save_export_history(history_path, history)
+    if written_count or not history_path.exists() or args.ignore_history:
+        save_export_history(history_path, history)
+        print(f"Saved export history to {history_path}")
     print(f"Wrote {adapter.record_label_singular} index to {output_md}")
     print(f"Wrote {written_count} {adapter.record_label_plural} to {record_dir}")
-    print(f"Saved export history to {history_path}")
     return 0
 
 

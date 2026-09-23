@@ -32,7 +32,16 @@ class TwitterAdapter(PlatformAdapter):
     record_label_singular = "tweet"
     record_label_plural = "tweets"
     supported_origins = ("x.com", "twitter.com")
-    store_names = ("tweets", "users", "captures")
+    store_names = ("tweets", "captures")
+
+    def browser_read_options(
+        self, args: Namespace, existing_ids: set[str]
+    ) -> dict[str, Any]:
+        return {
+            "kind": "twitter",
+            "extensions": sorted(parse_extensions(args.extensions) or []),
+            "existingIds": sorted(existing_ids),
+        }
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
