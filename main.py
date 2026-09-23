@@ -13,13 +13,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="从 Edge 的 IndexedDB 导出社交平台内容。",
     )
-    platforms = ("twitter", "xhs", "jike")
     all_platforms = sorted(set(PLATFORM_ADAPTERS) | set(PLATFORM_ALIASES))
     parser.add_argument(
         "platform",
         nargs="?",
-        choices=platforms,
-        help="导出平台，默认为 twitter。",
+        choices=all_platforms,
+        help="导出平台：x、xiaohongshu、okjike（别名：twitter、xhs、jike），默认为 x。",
     )
     parser.add_argument(
         "--output",
@@ -99,7 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    platform = args.platform_option or args.platform or "twitter"
+    platform = args.platform_option or args.platform or "x"
     return run_indexeddb_export(get_platform_adapter(platform), args)
 
 

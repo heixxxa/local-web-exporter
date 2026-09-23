@@ -28,7 +28,7 @@ SUPPORTED_CAPTURE_TYPES = {"tweet", None}
 
 class TwitterAdapter(PlatformAdapter):
     key = "x"
-    display_name = "Twitter"
+    display_name = "X"
     record_label_singular = "tweet"
     record_label_plural = "tweets"
     supported_origins = ("x.com", "twitter.com")
@@ -53,7 +53,7 @@ class TwitterAdapter(PlatformAdapter):
         )
 
     def default_document_title(self) -> str:
-        return "Twitter Export Restore"
+        return "X Export Restore"
 
     def default_db_prefix(self) -> str:
         package_json = Path(__file__).resolve().parents[2] / "package.json"

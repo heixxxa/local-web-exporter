@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-- `twitter`: 已完成适配，可正常导出
-- `xiaohongshu`: 已完成首版适配，可导出 note-like 记录（基于常见 schema 的鲁棒解析）
-- `okjike`: 已加入适配器骨架，尚未实现具体 IndexedDB schema 映射
+- `x`（别名 `twitter`）：已完成适配，可正常导出
+- `xiaohongshu`（别名 `xhs`）：已完成首版适配，可导出 note-like 记录（基于常见 schema 的鲁棒解析）
+- `okjike`（别名 `jike`）：已加入适配器骨架，尚未实现具体 IndexedDB schema 映射
 
 ## 项目结构
 
@@ -40,53 +40,56 @@ local-web-exporter/
 
 ## 常用命令
 
-导出 Twitter 的新增内容：
+导出 X 的新增内容：
 
 ```bash
-python main.py twitter
+python main.py x
 ```
 
-导出小红书内容（可用别名 `xhs` 或 `xiaohongshu`）：
+导出小红书内容（别名 `xhs`）：
 
 ```bash
-python main.py xhs
+python main.py xiaohongshu
 ```
 
-导出 Twitter 并下载媒体：
+导出 X 并下载媒体：
 
 ```bash
-python main.py twitter --media
+python main.py x --media
 ```
 
 生成并执行 `aria2` 下载任务：
 
 ```bash
-python main.py twitter --run-aria2
+python main.py x --run-aria2
 ```
 
 忽略历史记录并强制重建：
 
 ```bash
-python main.py twitter --fresh
+python main.py x --fresh
 ```
 
 ## 默认输出结构
 
-当输出文件是 `output/twitter.md` 时，默认会生成：
+执行 `python main.py x` 时，默认会生成：
 
 ```text
 output/
-  twitter.md
-  twitter.history.json
-  twitter_tweets/
-    1234567890.md
-  twitter_media/
-    tester_1234567890_photo_1_20260401.jpg
+  x/
+    x.md
+    x.history.json
+    x_tweets/
+      1234567890.md
+    x_media/
+      tester_1234567890_photo_1_20260401.jpg
 ```
+
+小红书和即刻分别使用 `output/xiaohongshu/`、`output/okjike/`。别名命令也使用相同的主名称目录。已有的 `output/twitter/` 或 `output/jike/` 不会自动迁移；若需继续写入旧归档，可用 `-o` 指定旧 Markdown 文件。
 
 ## 主要参数
 
-- `platform`: 可选，支持 `twitter`、`xhs`、`jike`，默认为 `twitter`
+- `platform`: 可选，主名称为 `x`、`xiaohongshu`、`okjike`，别名为 `twitter`、`xhs`、`jike`，默认为 `x`
 - `-o` / `--output`: 输出目录或 Markdown 文件，默认为 `output`
 - `--profile`: Edge 配置目录，默认为 `Default`
 - `--headed`: 显示浏览器窗口，便于登录或调试
@@ -97,7 +100,7 @@ output/
 
 ## 增量读取与性能
 
-默认仅复制目标站点的 IndexedDB（含 blob 文件），保留临时配置隔离。完全关闭 Edge 后，可用 `uv run main.py twitter --no-copy-indexeddb` 直接读取原始配置，省去复制耗时。
+默认仅复制目标站点的 IndexedDB（含 blob 文件），保留临时配置隔离。完全关闭 Edge 后，可用 `uv run main.py x --no-copy-indexeddb` 直接读取原始配置，省去复制耗时。
 
 Twitter 不再读取 `users`，也不再等待页面 `networkidle`。历史记录在浏览器启动前加载；仅当 Markdown 和本次要求的媒体文件均已存在时，才在浏览器端跳过该条记录。缺失文件或媒体下载未完成的内容仍会补导，`--fresh` 会重新读取全部目标内容。
 

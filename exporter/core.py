@@ -585,9 +585,9 @@ LEGACY_PLATFORM_ALIASES: dict[str, str] = {
 }
 
 PLATFORM_OUTPUT_FOLDER_NAMES: dict[str, str] = {
-    "x": "twitter",
+    "x": "x",
     "xhs": "xiaohongshu",
-    "jike": "jike",
+    "jike": "okjike",
 }
 
 
